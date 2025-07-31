@@ -1,8 +1,3 @@
-"use strict"
-/*global THREE, SHADER_LOADER, Mustache, Stats, Detector, $, dat:false */
-/*global document, window, setTimeout, requestAnimationFrame:false */
-/*global ProceduralTextures:false */
-
 if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
 function Observer() {
