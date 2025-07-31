@@ -1,30 +1,27 @@
 
-// Add these uniforms to your raytracer.glsl fragment shader:
 uniform float magnetic_strength;
 uniform float magnetic_dipole_tilt;
 uniform float field_lines_density;
 uniform vec3 field_color;
 uniform int show_plasma_effects;
 
-// Magnetic dipole field calculation
+
 vec3 magneticField(vec3 pos) {
     float r = length(pos);
     if (r < 1.1) return vec3(0.0); // Inside event horizon
     
-    // Convert to spherical coordinates
+   
     float theta = acos(pos.z / r);
     float phi = atan(pos.y, pos.x);
     
-    // Apply dipole tilt
+  
     float tilt_cos = cos(magnetic_dipole_tilt);
     float tilt_sin = sin(magnetic_dipole_tilt);
     
-    // Magnetic dipole field components
+  
     float r3 = r * r * r;
     float cos_theta = cos(theta);
     float sin_theta = sin(theta);
-    
-    // Dipole field strength (simplified)
     float B_r = (2.0 * magnetic_strength * cos_theta) / r3;
     float B_theta = (magnetic_strength * sin_theta) / r3;
     
@@ -37,7 +34,6 @@ vec3 magneticField(vec3 pos) {
     return B_field * tilt_cos + cross(B_field, vec3(0, 0, 1)) * tilt_sin;
 }
 
-// Field line visualization
 float fieldLineIntensity(vec3 pos, vec3 ray_dir) {
     vec3 B = magneticField(pos);
     float B_mag = length(B);
@@ -45,8 +41,7 @@ float fieldLineIntensity(vec3 pos, vec3 ray_dir) {
     if (B_mag < 0.001) return 0.0;
     
     vec3 B_normalized = B / B_mag;
-    
-    // Create field line pattern using sin/cos functions
+
     float line_param = dot(pos, B_normalized) * field_lines_density;
     float line_intensity = sin(line_param * 6.28318) * cos(line_param * 3.14159);
     line_intensity = pow(abs(line_intensity), 4.0);
@@ -58,7 +53,6 @@ float fieldLineIntensity(vec3 pos, vec3 ray_dir) {
     return line_intensity * fade * magnetic_strength;
 }
 
-// Plasma effects around magnetic field lines
 vec3 plasmaGlow(vec3 pos, float field_strength) {
     if (show_plasma_effects == 0) return vec3(0.0);
     
@@ -72,7 +66,6 @@ vec3 plasmaGlow(vec3 pos, float field_strength) {
     return mix(cool_color, hot_color, plasma_intensity) * plasma_intensity;
 }
 
-// Add this to your main raytracing loop in raytracer.glsl:
 {{#magneticFieldEnabled}}
     // Magnetic field visualization
     float field_line_intensity = fieldLineIntensity(ray_pos, ray_dir);
