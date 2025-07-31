@@ -5,13 +5,9 @@
 
 #define ROT_Y(a) mat3(cos(a), 0, sin(a), 0, 1, 0, -sin(a), 0, cos(a))
 
-
-// spectrum texture lookup helper macros
 const float BLACK_BODY_TEXTURE_COORD = 1.0;
 const float SINGLE_WAVELENGTH_TEXTURE_COORD = 0.5;
 const float TEMPERATURE_LOOKUP_RATIO_TEXTURE_COORD = 0.0;
-
-// black-body texture metadata
 const float SPECTRUM_TEX_TEMPERATURE_RANGE = 65504.0;
 const float SPECTRUM_TEX_WAVELENGTH_RANGE = 2048.0;
 const float SPECTRUM_TEX_RATIO_RANGE = 6.48053329012;
