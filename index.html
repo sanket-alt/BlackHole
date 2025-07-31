@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Black Hole</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+        <meta property="og:url"                content="https://oseiskar.github.io/black-hole" />
+        <meta property="og:title"              content="THREE.js Black Hole" />
+        <meta property="og:description"        content="A real time ray-traced simulation of a Schwarzschild black hole. Needs a decent GPU and a recent variant of Chrome or Firefox to run smoothly." />
+        <meta property="og:image"              content="http://oseiskar.github.io/img/black-hole.jpg" />
+        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+    </head>
+    <body>
+        
+        <div id="hint-text" class="hidden-phone initially-hidden">
+            Drag to rotate or toggle variables on the right ⟶
+        </div>
+        
+        <div id="magnetic-legend" class="magnetic-legend initially-hidden">
+            <h4>Magnetic Field Lines</h4>
+            <div class="legend-item">
+                <span class="color-box" style="background-color: #00ccff;"></span>
+                <span>Regular Dipole Lines</span>
+            </div>
+            <div class="legend-item">
+                <span class="color-box" style="background-color: #ff33cc;"></span>
+                <span>Twisted Field Lines</span>
+            </div>
+            <div class="legend-item">
+                <span class="color-box" style="background-color: #00ff33;"></span>
+                <span>Polar Jets</span>
+            </div>
+        </div>
+        <div class="info ">
+            <div id="loader">
+                Loading...
+                <div class="disclaimer">
+                This is a WebGL demo and very unlikely to work unless you run
+                a recent variant of Chrome or Firefox
+                </div>
+            </div>
+
+        </div>
+
+
+
+        <script src="js-libs/jquery-2.1.4.min.js"></script>
+        <script src="js-libs/three.min.js"></script>
+        <script src="js-libs/OrbitControls.js"></script>
+        <script src="js-libs/Detector.js"></script>
+        <script src="js-libs/stats.min.js"></script>
+        <script src="js-libs/ShaderLoader.min.js"></script>
+        <script src="js-libs/mustache.min.js"></script>
+        <script src="js-libs/dat.gui.min.js"></script>
+        <script src="three-js-monkey-patch.js"></script>
+
+        <script id="vertex-shader" type="x-shader/x-vertex">
+
+            void main()    {
+
+                gl_Position = vec4( position, 1.0 );
+
+            }
+
+        </script>
+        <script data-src="raytracer.glsl" data-name="raytracer" type="x-shader/x-fragment"></script>
+        <script src="main.js"></script>
+
+    </body>
+</html>
