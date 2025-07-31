@@ -14,7 +14,6 @@ function Observer() {
 
 Observer.prototype.orbitalFrame = function() {
 
-    //var orbital_y = observer.velocity.clone().normalize();
     var orbital_y = (new THREE.Vector3())
         .subVectors(observer.velocity.clone().normalize().multiplyScalar(4.0),
             observer.position).normalize();
@@ -38,7 +37,6 @@ Observer.prototype.move = function(dt) {
     var r;
     var v = 0;
 
-    // motion on a pre-defined cirular orbit
     if (shader.parameters.observer.motion) {
 
         r = shader.parameters.observer.distance;
@@ -73,7 +71,7 @@ var camera, scene, renderer, cameraControls, shader = null;
 var observer = new Observer();
 
 function Shader(mustacheTemplate) {
-    // Compile-time shader parameters
+
     this.parameters = {
         n_steps: 100,
         quality: 'medium',
@@ -85,22 +83,20 @@ function Shader(mustacheTemplate) {
             distance: 7.0,
             radius: 0.4
         },
-        // --- HAWKING RADIATION PARAMETERS ---
+  
         hawking_radiation: {
             enabled: false,
-            // Note: Mass is in Solar Masses (M☉) for the slider's convenience.
-            // It will be converted to kg for physics calculations.
-            log_mass_solar: 1, // log10(Mass in Solar Masses)
+
+            log_mass_solar: 1, 
             mode: 'Energy Spectrum',
             evaporation_speed: 1.0,
         },
-        // --- MAGNETIC FIELD PARAMETERS ---
         magnetic_field: {
             enabled: true,
             strength: 2.0,
             field_lines: true,
-            field_lines_density: 40, // Reduced density for better visibility
-            field_color: [1.0, 0.5, 0.0], // Orange color for field lines
+            field_lines_density: 40, 
+            field_color: [1.0, 0.5, 0.0], 
             dipole_tilt: 0.0, // Tilt angle of magnetic dipole in degrees
             show_plasma_effects: true
         },
@@ -195,8 +191,6 @@ const K_B = 1.380649e-23; // Boltzmann constant
 const STEFAN_BOLTZMANN = 5.670374e-8;
 const M_SOLAR = 1.989e30; // Mass of the sun in kg
 
-// We need a non-zero mass for the black hole to avoid division by zero.
-// This will be the mass used in the shader if evaporation completes.
 var black_hole_mass_kg = M_SOLAR; 
 
 function init(textures) {
@@ -228,7 +222,6 @@ function init(textures) {
         hawking_temperature: { type: "f", value: 0.0 },
         bh_radius: { type: "f", value: 1.0 }, // Schwarzschild radius in simulation units
 
-        // --- MAGNETIC FIELD UNIFORMS ---
         magnetic_strength: { type: "f", value: 1.0 },
         magnetic_dipole_tilt: { type: "f", value: 0.0 },
         field_lines_density: { type: "f", value: 50.0 },
@@ -283,24 +276,21 @@ function init(textures) {
                 const denominator = 15360 * Math.PI * Math.pow(G, 2) * Math.pow(black_hole_mass_kg, 2);
                 const power = numerator / denominator;
 
-                // dE/dt = P, and E = mc^2, so d(mc^2)/dt = P => dm/dt = P/c^2
                 const mass_loss_rate = power / Math.pow(C, 2);
 
-                // Apply evaporation speed multiplier and frame duration
                 black_hole_mass_kg -= mass_loss_rate * dt * p.evaporation_speed;
 
-                // Update the GUI slider to reflect the change
                 p.log_mass_solar = Math.log10(black_hole_mass_kg / M_SOLAR);
-                // This is a bit of a hack to make dat.gui update the display
+    
                 for (var i in gui.__folders['Hawking Radiation'].__controllers) {
                     gui.__folders['Hawking Radiation'].__controllers[i].updateDisplay();
                 }
             } else {
-                 // If not evaporating, set mass from the slider
+       
                  black_hole_mass_kg = Math.pow(10, p.log_mass_solar) * M_SOLAR;
             }
 
-            // Ensure mass doesn't go to zero or negative
+ 
             black_hole_mass_kg = Math.max(1e5, black_hole_mass_kg);
 
 
@@ -309,8 +299,6 @@ function init(textures) {
             const temp_denominator = 8 * Math.PI * G * black_hole_mass_kg * K_B;
             uniforms.hawking_temperature.value = temp_numerator / temp_denominator;
 
-            // The simulation's base unit for the Schwarzschild radius is 1.0.
-            // We need a scaling factor to map real radii to this. Let's say a 1 Solar Mass BH has radius 1.0.
             const base_radius_for_1_solar_mass = 1.0; 
             const base_mass_kg = M_SOLAR;
 
@@ -321,7 +309,6 @@ function init(textures) {
             uniforms.bh_radius.value = (real_radius_m / base_real_radius_m) * base_radius_for_1_solar_mass;
         }
 
-        // --- MAGNETIC FIELD LOGIC ---
         if (shader.parameters.magnetic_field.enabled) {
             const mf = shader.parameters.magnetic_field;
             
@@ -446,8 +433,6 @@ function setupGUI() {
             legend.hide();
         }
     }
-
-    // Initial legend visibility
     updateMagneticLegendVisibility();
 
 
@@ -582,6 +567,6 @@ function render() {
     var dt = getFrameDuration();
     observer.move(dt);
     if (shader.parameters.observer.motion) updateCamera();
-    updateUniforms(dt); // Pass dt for evaporation calculation
+    updateUniforms(dt); 
     renderer.render( scene, camera );
 }
