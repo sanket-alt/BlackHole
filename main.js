@@ -75,7 +75,7 @@ function Shader(mustacheTemplate) {
         noise_speed: 0.15,
         planet: {
             enabled: true,
-            distance: 7.0,
+            distance: 18.0,
             radius: 0.4
         },
   
@@ -88,7 +88,7 @@ function Shader(mustacheTemplate) {
         },
         magnetic_field: {
             enabled: true,
-            strength: 2.0,
+            strength: 10.0,
             field_lines: true,
             field_lines_density: 40, 
             field_color: [1.0, 0.5, 0.0], 
