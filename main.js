@@ -104,7 +104,7 @@ function Shader(mustacheTemplate) {
         time_scale: 1.0,
         observer: {
             motion: false,
-            distance: 14.0,
+            distance: 18.0,
             orbital_inclination: -10
         },
 
