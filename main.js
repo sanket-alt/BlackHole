@@ -61,9 +61,18 @@ Observer.prototype.move = function(dt) {
     this.time += dt;
 };
 
-var container, stats;
+var container;
 var camera, scene, renderer, cameraControls, shader = null;
 var observer = new Observer();
+
+// Measurement system
+var measurementSystem = {
+    probeEnabled: false,
+    probePosition: new THREE.Vector3(),
+    probeData: {},
+    showMeasurements: false,
+    mouseMeasurement: false
+};
 
 function Shader(mustacheTemplate) {
 
@@ -73,6 +82,14 @@ function Shader(mustacheTemplate) {
         accretion_disk: true,
         noise_scale: 3.5,
         noise_speed: 0.15,
+        measurement_tools: {
+            enabled: true,
+            show_probe: false,
+            show_grid: false,
+            show_mass_radius: true,
+            mass_solar: 1.0,
+            calculated_radius: 2.95 // km for 1 solar mass
+        },
         planet: {
             enabled: true,
             distance: 18.0,
@@ -223,6 +240,12 @@ function init(textures) {
         field_color: { type: "v3", value: new THREE.Vector3(1.0, 0.5, 0.0) },
         show_plasma_effects: { type: "i", value: 0 },
 
+        // Measurement uniforms
+        probe_position: { type: "v3", value: new THREE.Vector3(0, 0, 0) },
+        show_probe: { type: "i", value: 0 },
+        show_grid: { type: "i", value: 0 },
+        schwarzschild_radius: { type: "f", value: 1.0 },
+
         star_texture: { type: "t", value: textures.stars },
         galaxy_texture: { type: "t", value: textures.galaxy },
         planet_texture: { type: "t", value: textures.moon },
@@ -313,6 +336,15 @@ function init(textures) {
             uniforms.field_color.value.set(mf.field_color[0], mf.field_color[1], mf.field_color[2]);
             uniforms.show_plasma_effects.value = mf.show_plasma_effects ? 1 : 0;
         }
+
+        // Update measurement uniforms
+        if (shader.parameters.measurement_tools.enabled) {
+            const mt = shader.parameters.measurement_tools;
+            uniforms.show_probe.value = mt.show_probe ? 1 : 0;
+            uniforms.show_grid.value = mt.show_grid ? 1 : 0;
+            uniforms.schwarzschild_radius.value = mt.calculated_radius / 2.95; // Normalized to 1 solar mass
+            uniforms.probe_position.value.copy(measurementSystem.probePosition);
+        }
     };
 
     var material = new THREE.ShaderMaterial( {
@@ -335,11 +367,7 @@ function init(textures) {
     renderer.setPixelRatio( window.devicePixelRatio );
     container.appendChild( renderer.domElement );
 
-    stats = new Stats();
-    stats.domElement.style.position = 'absolute';
-    stats.domElement.style.top = '0px';
-    container.appendChild( stats.domElement );
-    $(stats.domElement).addClass('hidden-phone');
+    
 
     camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 80000 );
     initializeCamera(camera);
@@ -348,6 +376,10 @@ function init(textures) {
     cameraControls.target.set( 0, 0, 0 );
     cameraControls.addEventListener( 'change', updateCamera );
     updateCamera();
+
+    // Add mouse interaction for measurements
+    renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+    renderer.domElement.addEventListener('click', onMouseClick, false);
 
     onWindowResize();
 
@@ -467,6 +499,24 @@ function setupGUI() {
     folder.add(p, 'light_travel_time').onChange(updateShader);
     folder.add(p, 'time_scale').min(0);
 
+    // Measurement Tools GUI
+    var measurementFolder = gui.addFolder('Measurement Tools');
+    measurementFolder.add(p.measurement_tools, 'enabled').name('Enable Measurements').onChange(function() {
+        updateShader();
+        updateMeasurementDisplay();
+    });
+    measurementFolder.add(p.measurement_tools, 'show_probe').name('Show Probe').onChange(function() {
+        measurementSystem.probeEnabled = p.measurement_tools.show_probe;
+        updateShader();
+    });
+    measurementFolder.add(p.measurement_tools, 'show_grid').name('Show Grid').onChange(updateShader);
+    measurementFolder.add(p.measurement_tools, 'mass_solar', 0.1, 100).name('Mass (Solar Masses)').onChange(function(value) {
+        p.measurement_tools.calculated_radius = 2.95 * value; // Schwarzschild radius in km
+        updateMeasurementDisplay();
+    });
+    measurementFolder.add(p.measurement_tools, 'calculated_radius').name('Schwarzschild Radius (km)').listen();
+    measurementFolder.open();
+
 }
 
 function onWindowResize( event ) {
@@ -543,7 +593,6 @@ function animate() {
         render();
         lastCameraMat = camera.matrixWorldInverse.clone();
     }
-    stats.update();
 }
 
 var lastCameraMat = new THREE.Matrix4().identity();
@@ -564,4 +613,348 @@ function render() {
     if (shader.parameters.observer.motion) updateCamera();
     updateUniforms(dt); 
     renderer.render( scene, camera );
+}
+
+// Mouse interaction for measurements
+function onMouseMove(event) {
+    if (!shader.parameters.measurement_tools.enabled || !measurementSystem.mouseMeasurement) return;
+    
+    var rect = renderer.domElement.getBoundingClientRect();
+    var mouse = {
+        x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((event.clientY - rect.top) / rect.height) * 2 + 1
+    };
+    
+    // Calculate 3D position from mouse coordinates
+    var raycastPosition = calculateWorldPosition(mouse);
+    if (raycastPosition) {
+        measurementSystem.probePosition.copy(raycastPosition);
+        measurementSystem.probeData = calculatePhysicsAtPoint(raycastPosition);
+        updateProbeDisplay();
+    }
+}
+
+function onMouseClick(event) {
+    if (!shader.parameters.measurement_tools.enabled) return;
+    
+    var rect = renderer.domElement.getBoundingClientRect();
+    var mouse = {
+        x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((event.clientY - rect.top) / rect.height) * 2 + 1
+    };
+    
+    var raycastPosition = calculateWorldPosition(mouse);
+    if (raycastPosition) {
+        measurementSystem.probePosition.copy(raycastPosition);
+        measurementSystem.probeData = calculatePhysicsAtPoint(raycastPosition);
+        shader.parameters.measurement_tools.show_probe = true;
+        measurementSystem.probeEnabled = true;
+        updateProbeDisplay();
+        updateShader();
+        
+        // Update GUI
+        for (var i in gui.__folders['Measurement Tools'].__controllers) {
+            gui.__folders['Measurement Tools'].__controllers[i].updateDisplay();
+        }
+    }
+}
+
+function calculateWorldPosition(mouse) {
+    // Convert screen coordinates to world position on a sphere at distance 10
+    var distance = 10;
+    var x = mouse.x * distance * 0.5;
+    var y = mouse.y * distance * 0.5;
+    var z = Math.sqrt(Math.max(0, distance * distance - x * x - y * y));
+    
+    return new THREE.Vector3(x, y, z);
+}
+
+function calculatePhysicsAtPoint(position) {
+    var r = position.length();
+    var data = {};
+    
+    // Get current simulation parameters
+    var currentMass = shader.parameters.measurement_tools.mass_solar;
+    var rs = shader.parameters.measurement_tools.calculated_radius / 2.95; // Normalized Schwarzschild radius
+    var actualRsKm = shader.parameters.measurement_tools.calculated_radius; // Actual radius in km
+    
+    // Check if we're inside the event horizon
+    if (r < rs) {
+        data.status = 'Inside Event Horizon';
+        data.distance = (r * 2.95).toFixed(2) + ' km';
+        data.distanceFromHorizon = 'N/A (Inside horizon)';
+        data.gravitationalRedshift = 'Infinite';
+        data.timeDilation = '0 (Time stops)';
+        data.escapeVelocity = 'Greater than c';
+        
+        // Hawking radiation effects if enabled
+        if (shader.parameters.hawking_radiation && shader.parameters.hawking_radiation.enabled) {
+            var hawkingTemp = (H_BAR * Math.pow(C, 3)) / (8 * Math.PI * G * (currentMass * M_SOLAR) * K_B);
+            data.hawkingTemperature = hawkingTemp.toExponential(2) + ' K';
+            data.hawkingLuminosity = ((H_BAR * Math.pow(C, 6)) / (15360 * Math.PI * Math.pow(G, 2) * Math.pow(currentMass * M_SOLAR, 2))).toExponential(2) + ' W';
+        }
+        
+        return data;
+    }
+    
+    // Basic measurements
+    data.distance = (r * 2.95).toFixed(2) + ' km';
+    data.distanceFromHorizon = ((r - rs) * 2.95).toFixed(2) + ' km';
+    data.schwarzschildRadius = actualRsKm.toFixed(2) + ' km';
+    data.massRatio = currentMass.toFixed(2) + ' M☉';
+    
+    // Relativistic effects
+    var redshiftFactor = 1.0 / Math.sqrt(1.0 - rs / r);
+    data.gravitationalRedshift = redshiftFactor.toFixed(3);
+    data.timeDilation = (1.0 / redshiftFactor).toFixed(6);
+    
+    // Escape velocity
+    var escapeVel = Math.sqrt(2 * rs / r);
+    data.escapeVelocity = (escapeVel).toFixed(4) + 'c';
+    data.escapeVelocityKms = (escapeVel * 299792.458).toFixed(0) + ' km/s';
+    
+    // Orbital mechanics
+    var orbitalVel = Math.sqrt(rs / (2.0 * r));
+    data.circularOrbitVelocity = (orbitalVel).toFixed(4) + 'c';
+    data.circularOrbitVelocityKms = (orbitalVel * 299792.458).toFixed(0) + ' km/s';
+    
+    // Orbital period
+    var orbitalPeriod = 2 * Math.PI * Math.sqrt(Math.pow(r * 2.95 * 1000, 3) / (G * currentMass * M_SOLAR));
+    if (orbitalPeriod < 3600) {
+        data.orbitalPeriod = (orbitalPeriod / 60).toFixed(2) + ' minutes';
+    } else if (orbitalPeriod < 86400) {
+        data.orbitalPeriod = (orbitalPeriod / 3600).toFixed(2) + ' hours';
+    } else {
+        data.orbitalPeriod = (orbitalPeriod / 86400).toFixed(2) + ' days';
+    }
+    
+    // Tidal acceleration (gradient)
+    var tidalAccel = (2 * G * currentMass * M_SOLAR) / Math.pow(r * 2.95 * 1000, 3);
+    data.tidalAcceleration = tidalAccel.toExponential(2) + ' m/s²';
+    
+    // Surface gravity at this distance
+    var surfaceGrav = (G * currentMass * M_SOLAR) / Math.pow(r * 2.95 * 1000, 2);
+    data.surfaceGravity = surfaceGrav.toExponential(2) + ' m/s²';
+    data.surfaceGravityEarths = (surfaceGrav / 9.81).toExponential(2) + ' g';
+    
+    // Check for special regions
+    var iscoRadius = 3 * rs;
+    var photonSphereRadius = 1.5 * rs;
+    
+    if (r < photonSphereRadius) {
+        data.region = 'Photon Sphere Region';
+        data.warning = 'Unstable photon orbits';
+    } else if (r < iscoRadius) {
+        data.region = 'Between Photon Sphere and ISCO';
+        data.warning = 'Unstable circular orbits';
+    } else if (r < iscoRadius * 2) {
+        data.region = 'Near ISCO';
+        data.iscoDistance = ((iscoRadius - r) * 2.95).toFixed(2) + ' km';
+    }
+    
+    // Accretion disk physics (if enabled and in disk region)
+    var accretionMinR = shader.parameters.accretion_disk ? (1.3 * rs) : 0;
+    var accretionMaxR = accretionMinR + (6.0 * rs);
+    
+    if (shader.parameters.accretion_disk && r > accretionMinR && r < accretionMaxR && Math.abs(position.z) < 0.5) {
+        data.inAccretionDisk = true;
+        
+        // Temperature from accretion disk model with current parameters
+        var baseTemp = shader.parameters.noise_scale ? (12000 * shader.parameters.noise_scale / 3.5) : 12000;
+        var temp = baseTemp / Math.pow(r / rs, 0.75);
+        data.diskTemperature = temp.toFixed(0) + ' K';
+        data.diskTemperatureCelsius = (temp - 273.15).toFixed(0) + ' °C';
+        
+        // Disk density (relative)
+        var diskDensity = Math.exp(-2.0 * (r - accretionMinR) / (accretionMaxR - accretionMinR));
+        data.relativeDensity = diskDensity.toFixed(3);
+        
+        // Keplerian frequency with current mass
+        var keplerianFreq = Math.sqrt(G * currentMass * M_SOLAR / Math.pow(r * 2.95 * 1000, 3)) / (2 * Math.PI);
+        data.keplerianFrequency = keplerianFreq.toExponential(2) + ' Hz';
+        
+        // Accretion luminosity estimate
+        var accretionLuminosity = 0.1 * currentMass * M_SOLAR * Math.pow(C, 2) * (rs / r);
+        data.accretionLuminosity = accretionLuminosity.toExponential(2) + ' W';
+    }
+    
+    // Magnetic field effects (if enabled)
+    if (shader.parameters.magnetic_field && shader.parameters.magnetic_field.enabled) {
+        var magneticStrength = shader.parameters.magnetic_field.strength;
+        var magneticFieldValue = magneticStrength / Math.pow(r, 3); // Dipole falloff
+        data.magneticFieldStrength = magneticFieldValue.toFixed(4) + ' (relative)';
+        
+        // Check if in polar jet region
+        var theta = Math.acos(Math.abs(position.z) / r);
+        var polarFactor = Math.abs(Math.cos(theta));
+        if (polarFactor > 0.6) {
+            data.polarJetRegion = true;
+            data.jetAlignment = (polarFactor * 100).toFixed(1) + '%';
+        }
+    }
+    
+    // Observer motion effects (if enabled)
+    if (shader.parameters.observer && shader.parameters.observer.motion) {
+        var obsDistance = shader.parameters.observer.distance;
+        var obsVelocity = 1.0 / Math.sqrt(2.0 * (obsDistance - 1.0));
+        data.observerVelocity = (obsVelocity).toFixed(4) + 'c';
+        data.observerDopplerFactor = (1.0 + obsVelocity * Math.cos(Math.atan2(position.y, position.x))).toFixed(3);
+    }
+    
+    return data;
+}
+
+function updateProbeDisplay() {
+    var probeDiv = document.getElementById('probe-display');
+    if (!probeDiv) {
+        probeDiv = document.createElement('div');
+        probeDiv.id = 'probe-display';
+        probeDiv.className = 'probe-display initially-hidden';
+        document.body.appendChild(probeDiv);
+    }
+    
+    if (measurementSystem.probeEnabled && shader.parameters.measurement_tools.enabled) {
+        var html = '<h4>Physics Probe - Live Data</h4>';
+        html += '<div class="probe-data">';
+        
+        // Group data by category for better organization
+        var basicData = {};
+        var relativisticData = {};
+        var orbitalData = {};
+        var specialData = {};
+        
+        for (var key in measurementSystem.probeData) {
+            var value = measurementSystem.probeData[key];
+            if (key.includes('redshift') || key.includes('timeDilation') || key.includes('Doppler')) {
+                relativisticData[key] = value;
+            } else if (key.includes('orbit') || key.includes('velocity') || key.includes('Period') || key.includes('frequency')) {
+                orbitalData[key] = value;
+            } else if (key.includes('temperature') || key.includes('magnetic') || key.includes('jet') || key.includes('disk') || key.includes('hawking')) {
+                specialData[key] = value;
+            } else {
+                basicData[key] = value;
+            }
+        }
+        
+        // Display basic measurements
+        if (Object.keys(basicData).length > 0) {
+            html += '<div class="probe-section"><h5>Basic Properties</h5>';
+            for (var key in basicData) {
+                var displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, function(str) {
+                    return str.toUpperCase();
+                });
+                html += '<div class="probe-item">';
+                html += '<span class="probe-label">' + displayKey + ':</span>';
+                html += '<span class="probe-value">' + basicData[key] + '</span>';
+                html += '</div>';
+            }
+            html += '</div>';
+        }
+        
+        // Display relativistic effects
+        if (Object.keys(relativisticData).length > 0) {
+            html += '<div class="probe-section"><h5>Relativistic Effects</h5>';
+            for (var key in relativisticData) {
+                var displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, function(str) {
+                    return str.toUpperCase();
+                });
+                html += '<div class="probe-item">';
+                html += '<span class="probe-label">' + displayKey + ':</span>';
+                html += '<span class="probe-value">' + relativisticData[key] + '</span>';
+                html += '</div>';
+            }
+            html += '</div>';
+        }
+        
+        // Display orbital mechanics
+        if (Object.keys(orbitalData).length > 0) {
+            html += '<div class="probe-section"><h5>Orbital Mechanics</h5>';
+            for (var key in orbitalData) {
+                var displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, function(str) {
+                    return str.toUpperCase();
+                });
+                html += '<div class="probe-item">';
+                html += '<span class="probe-label">' + displayKey + ':</span>';
+                html += '<span class="probe-value">' + orbitalData[key] + '</span>';
+                html += '</div>';
+            }
+            html += '</div>';
+        }
+        
+        // Display special phenomena
+        if (Object.keys(specialData).length > 0) {
+            html += '<div class="probe-section"><h5>Special Phenomena</h5>';
+            for (var key in specialData) {
+                var displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, function(str) {
+                    return str.toUpperCase();
+                });
+                html += '<div class="probe-item">';
+                html += '<span class="probe-label">' + displayKey + ':</span>';
+                html += '<span class="probe-value">' + specialData[key] + '</span>';
+                html += '</div>';
+            }
+            html += '</div>';
+        }
+        
+        html += '</div>';
+        html += '<div class="probe-update-time">Updated: ' + new Date().toLocaleTimeString() + '</div>';
+        probeDiv.innerHTML = html;
+        probeDiv.classList.remove('initially-hidden');
+    } else {
+        probeDiv.classList.add('initially-hidden');
+    }
+}
+
+function updateMeasurementDisplay() {
+    var infoDiv = document.getElementById('measurement-info');
+    if (!infoDiv) {
+        infoDiv = document.createElement('div');
+        infoDiv.id = 'measurement-info';
+        infoDiv.className = 'measurement-info initially-hidden';
+        document.body.appendChild(infoDiv);
+    }
+    
+    if (shader.parameters.measurement_tools.enabled) {
+        var mass = shader.parameters.measurement_tools.mass_solar;
+        var radius = shader.parameters.measurement_tools.calculated_radius;
+        
+        var html = '<h4>Theoretical Predictions</h4>';
+        html += '<div class="measurement-data">';
+        html += '<div class="measurement-item">';
+        html += '<span class="measurement-label">Black Hole Mass:</span>';
+        html += '<span class="measurement-value">' + mass.toFixed(1) + ' M☉</span>';
+        html += '</div>';
+        html += '<div class="measurement-item">';
+        html += '<span class="measurement-label">Schwarzschild Radius:</span>';
+        html += '<span class="measurement-value">' + radius.toFixed(2) + ' km</span>';
+        html += '</div>';
+        html += '<div class="measurement-item">';
+        html += '<span class="measurement-label">Surface Gravity:</span>';
+        html += '<span class="measurement-value">' + (1.52e14 / (mass * mass)).toExponential(2) + ' m/s²</span>';
+        html += '</div>';
+        html += '<div class="measurement-item">';
+        html += '<span class="measurement-label">ISCO Radius:</span>';
+        html += '<span class="measurement-value">' + (radius * 3).toFixed(2) + ' km</span>';
+        html += '</div>';
+        html += '</div>';
+        html += '<div class="instructions">';
+        html += 'Click anywhere to place probe and measure local physics';
+        html += '</div>';
+        
+        infoDiv.innerHTML = html;
+        infoDiv.classList.remove('initially-hidden');
+    } else {
+        infoDiv.classList.add('initially-hidden');
+    }
+}
+
+// Enable mouse measurement mode
+function enableMouseMeasurement() {
+    measurementSystem.mouseMeasurement = true;
+    renderer.domElement.style.cursor = 'crosshair';
+}
+
+function disableMouseMeasurement() {
+    measurementSystem.mouseMeasurement = false;
+    renderer.domElement.style.cursor = 'default';
 }
