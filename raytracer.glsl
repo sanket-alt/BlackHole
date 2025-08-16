@@ -517,17 +517,19 @@ vec3 plasmaGlow(vec3 pos, float field_strength) {
 }
 
 // Get different colors for different magnetic field components with animation
-// Improved magnetic field color visualization
 vec3 getMagneticFieldColor(vec3 pos, float field_strength) {
     float r = length(pos);
     vec3 B = magneticField(pos);
     float theta = acos(clamp(pos.z / r, -1.0, 1.0));
     float phi = atan(pos.y, pos.x);
 
-    // Color definitions for different field line types
-    vec3 dipole_color = vec3(0.0, 0.8, 1.0); // Cyan for regular dipole lines
-    vec3 twisted_color = vec3(1.0, 0.2, 0.8); // Magenta for twisted/complex lines
+    // Different colors for different field line types with animation
+    vec3 dipole_color = vec3(0.0, 0.8, 1.0);    // Cyan for regular dipole lines
+    vec3 twisted_color = vec3(1.0, 0.2, 0.8);   // Magenta for twisted/complex field lines
     vec3 polar_jet_color = vec3(0.0, 1.0, 0.2); // Green for polar jets
+
+    // Determine field line type based on position and animated field properties
+    float polar_factor = abs(cos(theta));
 
     // Animate the twist factor for dynamic field evolution
     float twist_animation = time * 0.15 + r * 1.5;
@@ -535,20 +537,23 @@ vec3 getMagneticFieldColor(vec3 pos, float field_strength) {
 
     // Add magnetic activity zones that change over time
     float activity_zone = sin(time * 0.4 + phi * 3.0) * 0.5 + 0.5;
+
     vec3 final_color;
 
     // Polar jets (strong vertical field near poles) with pulsing
-    if (abs(cos(theta)) > 0.65) {
+    if (polar_factor > 0.65) {
         float jet_intensity = 0.8 + 0.2 * sin(time * 2.5);
         final_color = polar_jet_color * jet_intensity;
     }
     // Twisted field lines with animated regions
     else if ((twist_factor > 0.55 && abs(sin(theta)) > 0.25) || activity_zone > 0.75) {
+        // Animate color intensity for dynamic appearance
         float twist_intensity = 0.7 + 0.3 * sin(time * 1.2 + r * 0.8);
         final_color = twisted_color * twist_intensity;
     }
     // Regular dipole field lines with flowing energy
     else {
+        // Add energy flow visualization
         float flow_intensity = 0.6 + 0.4 * sin(time * 1.0 - r * 2.0);
         final_color = dipole_color * flow_intensity;
     }
@@ -561,90 +566,103 @@ vec3 getMagneticFieldColor(vec3 pos, float field_strength) {
 }
 
 // Enhanced polar jets with advanced physics-based features
-// New and improved polar jet emission with enhanced physics
 vec3 polarJetEmission(vec3 pos, vec3 ray_dir) {
     float r = length(pos);
-    // Jets only exist outside the event horizon and within a certain range
     if (r < 1.2 || r > 80.0) return vec3(0.0);
-    
-    // Calculate spherical coordinates for jet axis alignment
+
+    // Calculate spherical coordinates
     float theta = acos(clamp(pos.z / r, -1.0, 1.0));
     float phi = atan(pos.y, pos.x);
-
     float polar_factor = abs(cos(theta));
     
-    // Cylindrical coordinates for the jet itself
-    float z_jet = abs(pos.z) - 1.2;
-    float rho_jet = sqrt(pos.x * pos.x + pos.y * pos.y);
+    // Jet axis distance for cylindrical coordinates
+    float z_jet = abs(pos.z) - 1.2; // Distance along jet axis from launch point
+    float rho_jet = sqrt(pos.x * pos.x + pos.y * pos.y); // Cylindrical radius
 
     // === PHYSICS-BASED JET COLLIMATION ===
-    // More realistic magnetic collimation profile: r(z) ∝ z^0.4
-    // This is a standard model for astrophysical jets
+    // Realistic magnetic collimation profile: r(z) ∝ z^0.4
     float collimation_exponent = 0.4;
     float jet_base_radius = 0.15; // Initial jet radius at launch
     float expected_jet_radius = jet_base_radius * pow(max(z_jet / jet_base_radius, 1.0), collimation_exponent);
     
-    // Magnetic pinching factor - stronger near base to collimate the jet
+    // Magnetic pinching factor - stronger near base
     float magnetic_pinch_strength = 2.0 / (1.0 + 0.1 * z_jet);
     expected_jet_radius /= magnetic_pinch_strength;
     
-    // Determine if the ray is inside the jet cone
+    // Determine if we're inside the jet cone
     if (rho_jet > expected_jet_radius * 2.0) return vec3(0.0);
 
     // === CORE-SHEATH STRUCTURE ===
-    // Model jets with a fast-moving core and a slower, turbulent sheath
-    float core_radius = expected_jet_radius * 0.3;
+    float core_radius = expected_jet_radius * 0.3; // Fast core is 30% of total radius
     float sheath_radius = expected_jet_radius;
     
+    // Determine which component we're in
     bool in_core = rho_jet < core_radius;
     bool in_sheath = rho_jet >= core_radius && rho_jet < sheath_radius;
     
     if (!in_core && !in_sheath) return vec3(0.0);
 
     // === VELOCITY STRUCTURE ===
-    float core_velocity = 0.95; // Highly relativistic core velocity
-    float sheath_velocity = 0.6; // Slower sheath velocity
+    float core_velocity = 0.95;     // Highly relativistic core
+    float sheath_velocity = 0.6;    // Slower sheath
     
-    float jet_velocity = in_core ? core_velocity : mix(sheath_velocity, core_velocity, smoothstep(sheath_radius, core_radius, rho_jet));
-
-    // Improved helical magnetic field visualization
+    float jet_velocity = in_core ? core_velocity : 
+                        mix(sheath_velocity, core_velocity, 
+                            smoothstep(sheath_radius, core_radius, rho_jet));
+    
+    // Add helical motion component
     float helical_pitch = 3.0 + 1.0 * sin(time * 0.5);
     float helix_phase = phi + helical_pitch * z_jet / expected_jet_radius + time * 1.2;
+    
     vec3 jet_direction = normalize(vec3(0.0, 0.0, pos.z > 0.0 ? 1.0 : -1.0));
     vec3 jet_bulk_velocity = jet_direction * jet_velocity;
-    float helical_amplitude = in_core ? 0.05 : 0.15; // Stronger helical motion in the sheath
+    
+    // Helical velocity component (stronger in sheath)
+    float helical_amplitude = in_core ? 0.05 : 0.15;
     vec3 helical_velocity = vec3(
         cos(helix_phase) * helical_amplitude * jet_velocity,
         sin(helix_phase) * helical_amplitude * jet_velocity,
         0.0
     );
+    
     vec3 total_jet_velocity = jet_bulk_velocity + helical_velocity;
 
     // === RELATIVISTIC EFFECTS ===
     float gamma_jet = 1.0 / sqrt(1.0 - dot(total_jet_velocity, total_jet_velocity));
     float doppler_factor = gamma_jet * (1.0 + dot(normalize(ray_dir), total_jet_velocity));
+    
+    // Relativistic beaming (view-dependent brightness)
     float beaming_factor = pow(max(doppler_factor, 0.1), 2.5);
 
-    // === KNOTS AND INSTABILITIES ===
+    // === KNOTS AND VARIABILITY ===
     // Create moving knots (overdense regions)
     float knot_speed = 0.8 * jet_velocity;
     float knot_spacing = 5.0;
     float knot_position = mod(z_jet - time * knot_speed * 20.0, knot_spacing);
+    
+    // Multiple knots with different phases
     float knot1 = exp(-8.0 * pow(knot_position - knot_spacing * 0.2, 2.0));
     float knot2 = exp(-12.0 * pow(mod(z_jet - time * knot_speed * 15.0 + 2.0, knot_spacing) - knot_spacing * 0.3, 2.0));
     float knot3 = exp(-10.0 * pow(mod(z_jet - time * knot_speed * 25.0 + 4.0, knot_spacing) - knot_spacing * 0.5, 2.0));
+    
     float knot_enhancement = 1.0 + 1.5 * (knot1 + knot2 + knot3);
+    
+    // Pulsating knots
     knot_enhancement *= 0.8 + 0.2 * sin(time * 3.0 + z_jet * 0.5);
 
+    // === INSTABILITIES ===
     // Kelvin-Helmholtz instabilities at core-sheath boundary
     vec3 turb_coord = pos * 1.2 + vec3(time * 3.0, time * 2.5, time * 1.8);
+    
     float kh_instability = 0.0;
     if (abs(rho_jet - core_radius) < core_radius * 0.5) {
+        // Turbulence near the boundary
         for (int i = 0; i < 3; i++) {
             float freq = pow(2.0, float(i)) * 0.8;
             float amp = 0.4 / pow(2.0, float(i));
             kh_instability += amp * (fbm(turb_coord.xy * freq + turb_coord.z * 0.3) - 0.5);
         }
+        
         float boundary_factor = exp(-5.0 * abs(rho_jet - core_radius) / core_radius);
         kh_instability *= boundary_factor;
     }
@@ -652,88 +670,140 @@ vec3 polarJetEmission(vec3 pos, vec3 ray_dir) {
     // Rayleigh-Taylor instabilities (density fingers)
     float rt_instability = 0.0;
     if (in_sheath) {
-        rt_instability = 0.3 * sin(z_jet * 2.0 + time * 4.0 + phi * 6.0) * exp(-0.5 * rho_jet / expected_jet_radius);
+        rt_instability = 0.3 * sin(z_jet * 2.0 + time * 4.0 + phi * 6.0) *
+                        exp(-0.5 * rho_jet / expected_jet_radius);
     }
 
     // === SYNCHROTRON EMISSION GRADIENT ===
+    // Base synchrotron emission properties
     float magnetic_field_strength = magnetic_pinch_strength * (in_core ? 3.0 : 1.5);
-    float cooling_length = 15.0;
+    
+    // Radiative cooling with distance - energy loss
+    float cooling_length = 15.0; // Characteristic cooling distance
     float cooling_factor = exp(-z_jet / cooling_length);
-    float base_temp_core = 150000.0;
-    float base_temp_sheath = 80000.0;
+    
+    // Base temperature decreases with distance due to adiabatic expansion and cooling
+    float base_temp_core = 150000.0;   // 150,000 K in core
+    float base_temp_sheath = 80000.0;  // 80,000 K in sheath
     
     float base_temperature = in_core ? base_temp_core : base_temp_sheath;
+    
+    // Apply cooling
     base_temperature *= cooling_factor;
     
+    // Magnetic heating and shock heating
     float magnetic_heating = 1.0 + magnetic_field_strength * 0.3;
     float shock_heating = 1.0 + 0.5 * (abs(kh_instability) + abs(rt_instability));
     float knot_heating = knot_enhancement * 0.8 + 0.2;
+    
     float plasma_temp = base_temperature * magnetic_heating * shock_heating * knot_heating;
+    
+    // Apply Doppler shift to observed temperature
     plasma_temp /= doppler_factor;
 
     // === SYNCHROTRON COLOR GRADIENT ===
+    // Distance-dependent color evolution
     vec3 synchrotron_color;
+    
+    // Near base: bright white/blue (high energy)
     if (z_jet < 5.0) {
         synchrotron_color = mix(vec3(1.0, 1.0, 1.0), vec3(0.8, 0.9, 1.0), z_jet / 5.0);
     }
+    // Middle region: blue to green transition
     else if (z_jet < 15.0) {
         float t = (z_jet - 5.0) / 10.0;
         synchrotron_color = mix(vec3(0.8, 0.9, 1.0), vec3(0.5, 1.0, 0.7), t);
     }
+    // Far region: green to red (cooling)
     else {
         float t = min((z_jet - 15.0) / 20.0, 1.0);
         synchrotron_color = mix(vec3(0.5, 1.0, 0.7), vec3(1.0, 0.6, 0.3), t);
     }
     
+    // Enhance core brightness
     if (in_core) {
         synchrotron_color *= 1.4;
     }
 
     // === HELICAL MAGNETIC FIELD VISUALIZATION ===
     float helix_vis_strength = 0.0;
+    
+    // Faint helical field lines
     float helix_line_dist = abs(sin(helix_phase * 8.0)) * abs(cos(helix_phase * 4.0));
     helix_vis_strength = exp(-20.0 * helix_line_dist) * 0.3;
     
-    vec3 poloidal_color = vec3(1.0, 0.7, 0.3);
-    vec3 toroidal_color = vec3(0.3, 0.7, 1.0);
+    // Different colors for poloidal vs toroidal components
+    vec3 poloidal_color = vec3(1.0, 0.7, 0.3);  // Orange
+    vec3 toroidal_color = vec3(0.3, 0.7, 1.0);  // Blue
     
     float field_mix = 0.5 + 0.5 * sin(helix_phase * 2.0);
     vec3 helix_color = mix(poloidal_color, toroidal_color, field_mix);
 
     // === TOTAL EMISSION CALCULATION ===
+    // Base intensity with physics-based falloffs
     float distance_falloff = 1.0 / (1.0 + 0.005 * z_jet * z_jet);
     float density_factor = in_core ? 2.0 : 1.0;
     
+    // Collimation strength - how well confined the jet is
     float confinement = exp(-2.0 * pow(rho_jet / expected_jet_radius, 2.0));
-    float base_intensity = density_factor * confinement * distance_falloff * magnetic_field_strength * beaming_factor;
+    
+    float base_intensity = density_factor * confinement * distance_falloff * 
+                          magnetic_field_strength * beaming_factor;
+    
+    // Apply instability and knot modulations
     base_intensity *= (1.0 + 0.5 * abs(kh_instability) + 0.3 * abs(rt_instability));
     base_intensity *= knot_enhancement;
     
+    // === FINAL COLOR COMPOSITION ===
     vec4 thermal_emission = BLACK_BODY_COLOR(plasma_temp);
+    
+    // Combine thermal and synchrotron components
     vec3 final_color = thermal_emission.rgb * 0.4 + synchrotron_color * 0.6;
+    
+    // Add helical field contribution
     final_color += helix_color * helix_vis_strength * 0.8;
+    
+    // Apply Doppler color shifting
     if (doppler_factor > 1.2) {
+        // Strong blue-shift for approaching material
         final_color = final_color * vec3(0.8, 0.9, 1.3);
     } else if (doppler_factor < 0.8) {
+        // Red-shift for receding material  
         final_color = final_color * vec3(1.3, 0.9, 0.7);
     }
     
+    // === FADING AND OPACITY ===
+    // Distance-based fading
     float opacity = exp(-0.02 * z_jet) * cooling_factor;
+    
+    // Edge fading for smooth boundaries
     float edge_fade = smoothstep(sheath_radius, sheath_radius * 0.8, rho_jet);
     opacity *= edge_fade;
+    
+    // === SHOCK FRONTS AND ISM INTERACTION ===
+    // Add termination shock at large distances
     if (z_jet > 40.0) {
         float shock_dist = z_jet - 40.0;
-        float shock_strength = exp(-shock_dist * 0.1) * sin(shock_dist * 0.5 + time * 2.0) * 0.5 + 0.5;
+        float shock_strength = exp(-shock_dist * 0.1) * 
+                              sin(shock_dist * 0.5 + time * 2.0) * 0.5 + 0.5;
+        
+        // Shock heating creates bright knots
         final_color += vec3(1.0, 0.8, 0.6) * shock_strength * 0.4;
         base_intensity += shock_strength;
     }
     
+    // === TIME VARIABILITY ===
+    // Global jet activity variations
     float activity_cycle = 0.9 + 0.1 * sin(time * 0.3);
+    
+    // Precession-like wobble
     float precession = 1.0 + 0.05 * sin(time * 0.8 + phi * 2.0);
+    
     base_intensity *= activity_cycle * precession;
     
     return final_color * base_intensity * opacity * 0.8;
 }
+
 void main() {
 
     {{#planetEnabled}}
