@@ -147,6 +147,7 @@ a:hover {
     font-size: 8px !important;
     background: #000000 !important;
     border: 2px solid #ffffff !important;
+    border-top: none !important;
 }
 
 .dg li:not(.folder) {
