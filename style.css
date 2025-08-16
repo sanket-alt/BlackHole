@@ -665,3 +665,7 @@ button:active {
 .dg {
   border-top: none !important;
 }
+/* This rule targets all potential top borders in the GUI to ensure they are removed */
+.dg.ac, .dg, .dg.main.taller-than-window .close-button {
+    border-top: none !important;
+}
