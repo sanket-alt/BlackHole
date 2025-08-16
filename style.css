@@ -658,3 +658,9 @@ button:active {
     color: #888;
     font-size: 9px;
 }
+/* Ensure all top borders are removed from the GUI container and its components */
+.dg.main .close-button,
+.dg.a.has-save ul.closed,
+.dg {
+  border-top: none !important;
+}
