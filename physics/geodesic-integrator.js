@@ -1,5 +1,5 @@
 /**
- * GeodesicIntegrator.js - RK4/RK5 integrator for null geodesics in Kerr spacetime
+ * GeodesicIntegrator.js - RK4 integrator for null geodesics in Kerr spacetime
  * Solves the geodesic equation: du^μ/dλ + Γ^μ_νρ u^ν u^ρ = 0
  */
 
@@ -8,22 +8,17 @@ class GeodesicIntegrator {
     this.metric = kerrMetric;
     this.maxSteps = 10000;
     this.tolerance = 1e-8;
-    this.adaptiveStep = true;
   }
 
   /**
    * RK4 step for null geodesic integration
-   * state = [r, theta, phi, u_r, u_theta, u_phi, u_t]
    */
   rk4Step(state, stepSize) {
     const k1 = this.geodesicDerivative(state);
-    
     const midState1 = this.addScaledState(state, k1, stepSize * 0.5);
     const k2 = this.geodesicDerivative(midState1);
-    
     const midState2 = this.addScaledState(state, k2, stepSize * 0.5);
     const k3 = this.geodesicDerivative(midState2);
-    
     const endState = this.addScaledState(state, k3, stepSize);
     const k4 = this.geodesicDerivative(endState);
     
@@ -38,12 +33,10 @@ class GeodesicIntegrator {
 
   /**
    * Geodesic equation: du^μ/dλ + Γ^μ_νρ u^ν u^ρ = 0
-   * Returns derivative of state vector
    */
   geodesicDerivative(state) {
     const r = state.r;
     const theta = state.theta;
-    const phi = state.phi;
     const u_r = state.u_r;
     const u_theta = state.u_theta;
     const u_phi = state.u_phi;
@@ -51,12 +44,10 @@ class GeodesicIntegrator {
     
     const u = [u_t, u_r, u_theta, u_phi];
     
-    // Position derivatives (simple: du_i/dλ = u^i)
     const drdt = u_r;
     const dtheta_dt = u_theta;
     const dphi_dt = u_phi;
     
-    // Four-velocity acceleration components
     const dudt = [0, 0, 0, 0];
     
     for (let mu = 0; mu < 4; mu++) {
@@ -91,10 +82,9 @@ class GeodesicIntegrator {
     let stepSize = 0.01;
     
     for (let step = 0; step < this.maxSteps; step++) {
-      // Adaptive step sizing based on proximity to horizon
       const horizonDist = state.r - this.metric.r_plus;
       if (horizonDist < this.metric.r_plus * 0.2) {
-        stepSize = 0.001;  // Refine near horizon
+        stepSize = 0.001;
       } else if (horizonDist < this.metric.r_plus * 0.5) {
         stepSize = 0.005;
       } else {
@@ -103,9 +93,7 @@ class GeodesicIntegrator {
       
       const newState = this.rk4Step(state, stepSize);
       
-      // Check termination conditions
-      if (newState.r < 0) break;
-      if (newState.r > 1000) break;  // Ray escaped to infinity
+      if (newState.r < 0 || newState.r > 1000) break;
       if (isNaN(newState.r) || isNaN(newState.theta)) break;
       
       affineParam += stepSize;
@@ -124,35 +112,20 @@ class GeodesicIntegrator {
   }
 
   /**
-   * Compute initial four-velocity for a ray at observer position
-   * rayDir: normalized 3D direction vector (spherical coordinates)
+   * Compute initial four-velocity for a ray
    */
   computeInitialFourVelocity(r, theta, rayDir) {
-    // Convert ray direction from spherical to Boyer-Lindquist
-    // Assume rayDir is already in local observer frame
-    
-    const u_r = rayDir.r || 0.1;  // Radial component (typically negative for incoming)
+    const u_r = rayDir.r || 0.1;
     const u_theta = rayDir.theta || 0;
     const u_phi = rayDir.phi || 0;
     
-    // Normalize to null geodesic
-    const normalized = this.metric.normalizeNullGeodesic(r, theta, u_r, u_theta, u_phi);
-    
-    return normalized;
+    return this.metric.normalizeNullGeodesic(r, theta, u_r, u_theta, u_phi);
   }
 
-  /**
-   * Add two state vectors
-   */
   addStates(...states) {
     const sum = {
-      r: 0,
-      theta: 0,
-      phi: 0,
-      u_t: 0,
-      u_r: 0,
-      u_theta: 0,
-      u_phi: 0,
+      r: 0, theta: 0, phi: 0,
+      u_t: 0, u_r: 0, u_theta: 0, u_phi: 0,
     };
     
     for (const state of states) {
@@ -164,13 +137,9 @@ class GeodesicIntegrator {
       sum.u_theta += state.u_theta;
       sum.u_phi += state.u_phi;
     }
-    
     return sum;
   }
 
-  /**
-   * Scale state vector by scalar
-   */
   scaleState(state, scalar) {
     return {
       r: state.r * scalar,
@@ -183,9 +152,6 @@ class GeodesicIntegrator {
     };
   }
 
-  /**
-   * Add scaled state to base state
-   */
   addScaledState(baseState, deltaState, scale) {
     return {
       r: baseState.r + deltaState.r * scale,
@@ -198,9 +164,6 @@ class GeodesicIntegrator {
     };
   }
 
-  /**
-   * Check null geodesic constraint: g_μν u^μ u^ν = 0
-   */
   checkNullConstraint(state) {
     const g = this.metric.metricTensor(state.r, state.theta);
     const u = [state.u_t, state.u_r, state.u_theta, state.u_phi];
@@ -211,8 +174,7 @@ class GeodesicIntegrator {
         sum += g[mu][nu] * u[mu] * u[nu];
       }
     }
-    
-    return Math.abs(sum);  // Should be near zero
+    return Math.abs(sum);
   }
 }
 
