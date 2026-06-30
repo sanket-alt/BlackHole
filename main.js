@@ -1,5 +1,9 @@
 if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
+// Global Kerr metric instance
+var kerrMetric = null;
+var controlPanel = null;
+
 function Observer() {
     this.position = new THREE.Vector3(10,0,0);
     this.velocity = new THREE.Vector3(0,1,0);
@@ -8,7 +12,6 @@ function Observer() {
 }
 
 Observer.prototype.orbitalFrame = function() {
-
     var orbital_y = (new THREE.Vector3())
         .subVectors(observer.velocity.clone().normalize().multiplyScalar(4.0),
             observer.position).normalize();
@@ -16,7 +19,6 @@ Observer.prototype.orbitalFrame = function() {
     var orbital_z = (new THREE.Vector3())
         .crossVectors(observer.position, orbital_y).normalize();
     var orbital_x = (new THREE.Vector3()).crossVectors(orbital_y, orbital_z);
-
 
     return (new THREE.Matrix4()).makeBasis(
         orbital_x,
@@ -26,14 +28,12 @@ Observer.prototype.orbitalFrame = function() {
 };
 
 Observer.prototype.move = function(dt) {
-
     dt *= shader.parameters.time_scale;
 
     var r;
     var v = 0;
 
     if (shader.parameters.observer.motion) {
-
         r = shader.parameters.observer.distance;
         v =  1.0 / Math.sqrt(2.0*(r-1.0));
         var ang_vel = v / r;
@@ -75,7 +75,6 @@ var measurementSystem = {
 };
 
 function Shader(mustacheTemplate) {
-
     this.parameters = {
         n_steps: 100,
         quality: 'medium',
@@ -88,17 +87,15 @@ function Shader(mustacheTemplate) {
             show_grid: false,
             show_mass_radius: true,
             mass_solar: 1.0,
-            calculated_radius: 2.95 // km for 1 solar mass
+            calculated_radius: 2.95
         },
         planet: {
             enabled: true,
             distance: 18.0,
             radius: 0.4
         },
-  
         hawking_radiation: {
             enabled: false,
-
             log_mass_solar: 1, 
             mode: 'Energy Spectrum',
             evaporation_speed: 1.0,
@@ -109,7 +106,7 @@ function Shader(mustacheTemplate) {
             field_lines: true,
             field_lines_density: 40, 
             field_color: [1.0, 0.5, 0.0], 
-            dipole_tilt: 0.0, // Tilt angle of magnetic dipole in degrees
+            dipole_tilt: 0.0,
             show_plasma_effects: true
         },
         lorentz_contraction: true,
@@ -124,19 +121,15 @@ function Shader(mustacheTemplate) {
             distance: 18.0,
             orbital_inclination: -10
         },
-
         planetEnabled: function() {
             return this.planet.enabled && this.quality !== 'fast';
         },
-
         observerMotion: function() {
             return this.observer.motion;
         },
-        // New function for template
         hawkingRadiationEnabled: function() {
             return this.hawking_radiation.enabled;
         },
-        
         magneticFieldEnabled: function() {
             return this.magnetic_field.enabled;
         }
@@ -145,7 +138,9 @@ function Shader(mustacheTemplate) {
     this.needsUpdate = false;
 
     this.hasMovingParts = function() {
-        return this.parameters.planet.enabled || this.parameters.observer.motion || this.parameters.accretion_disk || this.parameters.hawking_radiation.enabled || this.parameters.magnetic_field.enabled;
+        return this.parameters.planet.enabled || this.parameters.observer.motion || 
+               this.parameters.accretion_disk || this.parameters.hawking_radiation.enabled || 
+               this.parameters.magnetic_field.enabled;
     };
 
     this.compile = function() {
@@ -195,18 +190,17 @@ function degToRad(a) { return Math.PI * a / 180.0; }
 
 var updateUniforms;
 
-// --- Physics Constants ---
-const G = 6.67430e-11; // Gravitational constant
-const H_BAR = 1.0545718e-34; // Reduced Planck constant
-const C = 299792458.0; // Speed of light
-const K_B = 1.380649e-23; // Boltzmann constant
+// Physics Constants
+const G = 6.67430e-11;
+const H_BAR = 1.0545718e-34;
+const C = 299792458.0;
+const K_B = 1.380649e-23;
 const STEFAN_BOLTZMANN = 5.670374e-8;
-const M_SOLAR = 1.989e30; // Mass of the sun in kg
+const M_SOLAR = 1.989e30;
 
 var black_hole_mass_kg = M_SOLAR; 
 
 function init(textures) {
-
     container = document.createElement( 'div' );
     document.body.appendChild( container );
 
@@ -229,10 +223,9 @@ function init(textures) {
         noise_scale: { type: "f" },
         noise_speed: { type: "f" },
 
-        // --- HAWKING RADIATION UNIFORMS ---
         hawking_mode: { type: "i", value: 0 },
         hawking_temperature: { type: "f", value: 0.0 },
-        bh_radius: { type: "f", value: 1.0 }, // Schwarzschild radius in simulation units
+        bh_radius: { type: "f", value: 1.0 },
 
         magnetic_strength: { type: "f", value: 1.0 },
         magnetic_dipole_tilt: { type: "f", value: 0.0 },
@@ -240,7 +233,6 @@ function init(textures) {
         field_color: { type: "v3", value: new THREE.Vector3(1.0, 0.5, 0.0) },
         show_plasma_effects: { type: "i", value: 0 },
 
-        // Measurement uniforms
         probe_position: { type: "v3", value: new THREE.Vector3(0, 0, 0) },
         show_probe: { type: "i", value: 0 },
         show_grid: { type: "i", value: 0 },
@@ -278,58 +270,43 @@ function init(textures) {
         setVec('cam_pos', observer.position);
         setVec('cam_vel', observer.velocity);
 
-        // --- HAWKING RADIATION LOGIC ---
         if (shader.parameters.hawking_radiation.enabled) {
             const p = shader.parameters.hawking_radiation;
-
-            // Mode selection
             const modes = ['Quantum Source', 'Energy Spectrum', 'Evaporation'];
             uniforms.hawking_mode.value = modes.indexOf(p.mode);
 
-            // Evaporation logic
-            if (p.mode === 'Evaporation' && black_hole_mass_kg > 1e5) { // Stop evaporation at a small mass
-                // Power radiated by a black hole (Stefan-Boltzmann for BHs)
-                // P = (h_bar * c^6) / (15360 * pi * G^2 * M^2)
+            if (p.mode === 'Evaporation' && black_hole_mass_kg > 1e5) {
                 const numerator = H_BAR * Math.pow(C, 6);
                 const denominator = 15360 * Math.PI * Math.pow(G, 2) * Math.pow(black_hole_mass_kg, 2);
                 const power = numerator / denominator;
-
                 const mass_loss_rate = power / Math.pow(C, 2);
-
                 black_hole_mass_kg -= mass_loss_rate * dt * p.evaporation_speed;
-
                 p.log_mass_solar = Math.log10(black_hole_mass_kg / M_SOLAR);
-    
-                for (var i in gui.__folders['Hawking Radiation'].__controllers) {
-                    gui.__folders['Hawking Radiation'].__controllers[i].updateDisplay();
+                
+                if (gui && gui.__folders['Hawking Radiation']) {
+                    for (var i in gui.__folders['Hawking Radiation'].__controllers) {
+                        gui.__folders['Hawking Radiation'].__controllers[i].updateDisplay();
+                    }
                 }
             } else {
-       
-                 black_hole_mass_kg = Math.pow(10, p.log_mass_solar) * M_SOLAR;
+                black_hole_mass_kg = Math.pow(10, p.log_mass_solar) * M_SOLAR;
             }
 
- 
             black_hole_mass_kg = Math.max(1e5, black_hole_mass_kg);
 
-
-            // Calculate Hawking Temperature: T = (h_bar * c^3) / (8 * pi * G * M * k_B)
             const temp_numerator = H_BAR * Math.pow(C, 3);
             const temp_denominator = 8 * Math.PI * G * black_hole_mass_kg * K_B;
             uniforms.hawking_temperature.value = temp_numerator / temp_denominator;
 
             const base_radius_for_1_solar_mass = 1.0; 
             const base_mass_kg = M_SOLAR;
-
-            // Schwarzschild Radius: Rs = 2GM/c^2
             const real_radius_m = (2 * G * black_hole_mass_kg) / Math.pow(C, 2);
             const base_real_radius_m = (2 * G * base_mass_kg) / Math.pow(C, 2);
-
             uniforms.bh_radius.value = (real_radius_m / base_real_radius_m) * base_radius_for_1_solar_mass;
         }
 
         if (shader.parameters.magnetic_field.enabled) {
             const mf = shader.parameters.magnetic_field;
-            
             uniforms.magnetic_strength.value = mf.strength;
             uniforms.magnetic_dipole_tilt.value = degToRad(mf.dipole_tilt);
             uniforms.field_lines_density.value = mf.field_lines_density;
@@ -337,12 +314,11 @@ function init(textures) {
             uniforms.show_plasma_effects.value = mf.show_plasma_effects ? 1 : 0;
         }
 
-        // Update measurement uniforms
         if (shader.parameters.measurement_tools.enabled) {
             const mt = shader.parameters.measurement_tools;
             uniforms.show_probe.value = mt.show_probe ? 1 : 0;
             uniforms.show_grid.value = mt.show_grid ? 1 : 0;
-            uniforms.schwarzschild_radius.value = mt.calculated_radius / 2.95; // Normalized to 1 solar mass
+            uniforms.schwarzschild_radius.value = mt.calculated_radius / 2.95;
             uniforms.probe_position.value.copy(measurementSystem.probePosition);
         }
     };
@@ -367,8 +343,6 @@ function init(textures) {
     renderer.setPixelRatio( window.devicePixelRatio );
     container.appendChild( renderer.domElement );
 
-    
-
     camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 80000 );
     initializeCamera(camera);
 
@@ -377,21 +351,19 @@ function init(textures) {
     cameraControls.addEventListener( 'change', updateCamera );
     updateCamera();
 
-    // Add mouse interaction for measurements
     renderer.domElement.addEventListener('mousemove', onMouseMove, false);
     renderer.domElement.addEventListener('click', onMouseClick, false);
 
     onWindowResize();
-
     window.addEventListener( 'resize', onWindowResize, false );
 
     setupGUI();
+    setupKerrControlPanel();
 }
 
-var gui; // Make gui global to access it later
+var gui;
 
 function setupGUI() {
-
     var hint = $('#hint-text');
     var p = shader.parameters;
 
@@ -416,7 +388,6 @@ function setupGUI() {
             p.n_steps = 200;
             break;
         }
-
         updateShader();
     });
     gui.add(p, 'accretion_disk').onChange(updateShader);
@@ -426,16 +397,13 @@ function setupGUI() {
     diskFolder.add(p, 'noise_speed', 0.0, 1.0).name('Animation Speed');
     diskFolder.open();
 
-    // --- HAWKING RADIATION GUI ---
     var hawkingFolder = gui.addFolder('Hawking Radiation');
     hawkingFolder.add(p.hawking_radiation, 'enabled').name('Enable Simulation').onChange(updateShader);
     hawkingFolder.add(p.hawking_radiation, 'mode', ['Quantum Source', 'Energy Spectrum', 'Evaporation']).name('Visualization Mode');
-    // Using log scale for mass, as it spans many orders of magnitude
     hawkingFolder.add(p.hawking_radiation, 'log_mass_solar', -15, 10).name('log10(Mass / M☉)');
     hawkingFolder.add(p.hawking_radiation, 'evaporation_speed', 1e15, 1e25).name('Evaporation Speed');
     hawkingFolder.open();
 
-    // --- MAGNETIC FIELD GUI ---
     var magneticFolder = gui.addFolder('Magnetic Field');
     magneticFolder.add(p.magnetic_field, 'enabled').name('Enable Magnetic Field').onChange(function(enabled) {
         updateShader();
@@ -461,7 +429,6 @@ function setupGUI() {
         }
     }
     updateMagneticLegendVisibility();
-
 
     var folder = gui.addFolder('Observer');
     folder.add(p.observer, 'distance').min(1.5).max(30).onChange(updateCamera);
@@ -492,14 +459,12 @@ function setupGUI() {
     setGuiRowClass(
         folder.add(p, 'lorentz_contraction').onChange(updateShader),
         'planet-controls indirect-planet-controls');
-
     folder.open();
 
     folder = gui.addFolder('Time');
     folder.add(p, 'light_travel_time').onChange(updateShader);
     folder.add(p, 'time_scale').min(0);
 
-    // Measurement Tools GUI
     var measurementFolder = gui.addFolder('Measurement Tools');
     measurementFolder.add(p.measurement_tools, 'enabled').name('Enable Measurements').onChange(function() {
         updateShader();
@@ -511,12 +476,30 @@ function setupGUI() {
     });
     measurementFolder.add(p.measurement_tools, 'show_grid').name('Show Grid').onChange(updateShader);
     measurementFolder.add(p.measurement_tools, 'mass_solar', 0.1, 100).name('Mass (Solar Masses)').onChange(function(value) {
-        p.measurement_tools.calculated_radius = 2.95 * value; // Schwarzschild radius in km
+        p.measurement_tools.calculated_radius = 2.95 * value;
         updateMeasurementDisplay();
     });
     measurementFolder.add(p.measurement_tools, 'calculated_radius').name('Schwarzschild Radius (km)').listen();
     measurementFolder.open();
+}
 
+function setupKerrControlPanel() {
+    // Initialize Kerr metric
+    kerrMetric = new KerrMetric(1.0, 0.7);
+    
+    // Setup control panel
+    controlPanel = new KerrControlPanel('kerr-panel', function(state) {
+        // Update Kerr metric with new parameters
+        kerrMetric = new KerrMetric(state.blackHoleMass, state.spinParameter);
+        
+        // Update shader parameters
+        shader.parameters.observer.orbital_inclination = state.inclination;
+        shader.parameters.ray_march_steps = state.rayMarchSteps;
+        shader.parameters.magnetic_field.enabled = state.magneticFieldEnabled;
+        shader.parameters.magnetic_field.strength = state.magneticFieldStrength;
+        
+        scene.updateShader();
+    });
 }
 
 function onWindowResize( event ) {
@@ -524,19 +507,16 @@ function onWindowResize( event ) {
 }
 
 function initializeCamera(camera) {
-
     var pitchAngle = 3.0, yawAngle = 0.0;
 
     camera.matrixWorldInverse.makeRotationX(degToRad(-pitchAngle));
     camera.matrixWorldInverse.multiply(new THREE.Matrix4().makeRotationY(degToRad(-yawAngle)));
 
     var m = camera.matrixWorldInverse.elements;
-
     camera.position.set(m[2], m[6], m[10]);
 }
 
 function updateCamera( event ) {
-
     var zoom_dist = camera.position.length();
     var m = camera.matrixWorldInverse.elements;
     var camera_matrix;
@@ -544,7 +524,7 @@ function updateCamera( event ) {
     if (shader.parameters.observer.motion) {
         camera_matrix = new THREE.Matrix3();
     }
-    else {
+    else {
         camera_matrix = observer.orientation;
     }
 
@@ -555,11 +535,8 @@ function updateCamera( event ) {
     );
 
     if (shader.parameters.observer.motion) {
-
         observer.orientation = observer.orbitalFrame().multiply(camera_matrix);
-
     } else {
-
         var p = new THREE.Vector3(
             camera_matrix.elements[6],
             camera_matrix.elements[7],
@@ -615,7 +592,7 @@ function render() {
     renderer.render( scene, camera );
 }
 
-// Mouse interaction for measurements
+// Mouse interaction
 function onMouseMove(event) {
     if (!shader.parameters.measurement_tools.enabled || !measurementSystem.mouseMeasurement) return;
     
@@ -625,7 +602,6 @@ function onMouseMove(event) {
         y: -((event.clientY - rect.top) / rect.height) * 2 + 1
     };
     
-    // Calculate 3D position from mouse coordinates
     var raycastPosition = calculateWorldPosition(mouse);
     if (raycastPosition) {
         measurementSystem.probePosition.copy(raycastPosition);
@@ -650,17 +626,16 @@ function onMouseClick(event) {
         shader.parameters.measurement_tools.show_probe = true;
         measurementSystem.probeEnabled = true;
         updateProbeDisplay();
-        updateShader();
         
-        // Update GUI
-        for (var i in gui.__folders['Measurement Tools'].__controllers) {
-            gui.__folders['Measurement Tools'].__controllers[i].updateDisplay();
+        if (gui && gui.__folders['Measurement Tools']) {
+            for (var i in gui.__folders['Measurement Tools'].__controllers) {
+                gui.__folders['Measurement Tools'].__controllers[i].updateDisplay();
+            }
         }
     }
 }
 
 function calculateWorldPosition(mouse) {
-    // Convert screen coordinates to world position on a sphere at distance 10
     var distance = 10;
     var x = mouse.x * distance * 0.5;
     var y = mouse.y * distance * 0.5;
@@ -673,12 +648,10 @@ function calculatePhysicsAtPoint(position) {
     var r = position.length();
     var data = {};
     
-    // Get current simulation parameters
     var currentMass = shader.parameters.measurement_tools.mass_solar;
-    var rs = shader.parameters.measurement_tools.calculated_radius / 2.95; // Normalized Schwarzschild radius
-    var actualRsKm = shader.parameters.measurement_tools.calculated_radius; // Actual radius in km
+    var rs = shader.parameters.measurement_tools.calculated_radius / 2.95;
+    var actualRsKm = shader.parameters.measurement_tools.calculated_radius;
     
-    // Check if we're inside the event horizon
     if (r < rs) {
         data.status = 'Inside Event Horizon';
         data.distance = (r * 2.95).toFixed(2) + ' km';
@@ -687,7 +660,6 @@ function calculatePhysicsAtPoint(position) {
         data.timeDilation = '0 (Time stops)';
         data.escapeVelocity = 'Greater than c';
         
-        // Hawking radiation effects if enabled
         if (shader.parameters.hawking_radiation && shader.parameters.hawking_radiation.enabled) {
             var hawkingTemp = (H_BAR * Math.pow(C, 3)) / (8 * Math.PI * G * (currentMass * M_SOLAR) * K_B);
             data.hawkingTemperature = hawkingTemp.toExponential(2) + ' K';
@@ -697,28 +669,23 @@ function calculatePhysicsAtPoint(position) {
         return data;
     }
     
-    // Basic measurements
     data.distance = (r * 2.95).toFixed(2) + ' km';
     data.distanceFromHorizon = ((r - rs) * 2.95).toFixed(2) + ' km';
     data.schwarzschildRadius = actualRsKm.toFixed(2) + ' km';
     data.massRatio = currentMass.toFixed(2) + ' M☉';
     
-    // Relativistic effects
     var redshiftFactor = 1.0 / Math.sqrt(1.0 - rs / r);
     data.gravitationalRedshift = redshiftFactor.toFixed(3);
     data.timeDilation = (1.0 / redshiftFactor).toFixed(6);
     
-    // Escape velocity
     var escapeVel = Math.sqrt(2 * rs / r);
     data.escapeVelocity = (escapeVel).toFixed(4) + 'c';
     data.escapeVelocityKms = (escapeVel * 299792.458).toFixed(0) + ' km/s';
     
-    // Orbital mechanics
     var orbitalVel = Math.sqrt(rs / (2.0 * r));
     data.circularOrbitVelocity = (orbitalVel).toFixed(4) + 'c';
     data.circularOrbitVelocityKms = (orbitalVel * 299792.458).toFixed(0) + ' km/s';
     
-    // Orbital period
     var orbitalPeriod = 2 * Math.PI * Math.sqrt(Math.pow(r * 2.95 * 1000, 3) / (G * currentMass * M_SOLAR));
     if (orbitalPeriod < 3600) {
         data.orbitalPeriod = (orbitalPeriod / 60).toFixed(2) + ' minutes';
@@ -728,16 +695,13 @@ function calculatePhysicsAtPoint(position) {
         data.orbitalPeriod = (orbitalPeriod / 86400).toFixed(2) + ' days';
     }
     
-    // Tidal acceleration (gradient)
     var tidalAccel = (2 * G * currentMass * M_SOLAR) / Math.pow(r * 2.95 * 1000, 3);
     data.tidalAcceleration = tidalAccel.toExponential(2) + ' m/s²';
     
-    // Surface gravity at this distance
     var surfaceGrav = (G * currentMass * M_SOLAR) / Math.pow(r * 2.95 * 1000, 2);
     data.surfaceGravity = surfaceGrav.toExponential(2) + ' m/s²';
     data.surfaceGravityEarths = (surfaceGrav / 9.81).toExponential(2) + ' g';
     
-    // Check for special regions
     var iscoRadius = 3 * rs;
     var photonSphereRadius = 1.5 * rs;
     
@@ -752,39 +716,32 @@ function calculatePhysicsAtPoint(position) {
         data.iscoDistance = ((iscoRadius - r) * 2.95).toFixed(2) + ' km';
     }
     
-    // Accretion disk physics (if enabled and in disk region)
     var accretionMinR = shader.parameters.accretion_disk ? (1.3 * rs) : 0;
     var accretionMaxR = accretionMinR + (6.0 * rs);
     
     if (shader.parameters.accretion_disk && r > accretionMinR && r < accretionMaxR && Math.abs(position.z) < 0.5) {
         data.inAccretionDisk = true;
         
-        // Temperature from accretion disk model with current parameters
         var baseTemp = shader.parameters.noise_scale ? (12000 * shader.parameters.noise_scale / 3.5) : 12000;
         var temp = baseTemp / Math.pow(r / rs, 0.75);
         data.diskTemperature = temp.toFixed(0) + ' K';
         data.diskTemperatureCelsius = (temp - 273.15).toFixed(0) + ' °C';
         
-        // Disk density (relative)
         var diskDensity = Math.exp(-2.0 * (r - accretionMinR) / (accretionMaxR - accretionMinR));
         data.relativeDensity = diskDensity.toFixed(3);
         
-        // Keplerian frequency with current mass
         var keplerianFreq = Math.sqrt(G * currentMass * M_SOLAR / Math.pow(r * 2.95 * 1000, 3)) / (2 * Math.PI);
         data.keplerianFrequency = keplerianFreq.toExponential(2) + ' Hz';
         
-        // Accretion luminosity estimate
         var accretionLuminosity = 0.1 * currentMass * M_SOLAR * Math.pow(C, 2) * (rs / r);
         data.accretionLuminosity = accretionLuminosity.toExponential(2) + ' W';
     }
     
-    // Magnetic field effects (if enabled)
     if (shader.parameters.magnetic_field && shader.parameters.magnetic_field.enabled) {
         var magneticStrength = shader.parameters.magnetic_field.strength;
-        var magneticFieldValue = magneticStrength / Math.pow(r, 3); // Dipole falloff
+        var magneticFieldValue = magneticStrength / Math.pow(r, 3);
         data.magneticFieldStrength = magneticFieldValue.toFixed(4) + ' (relative)';
         
-        // Check if in polar jet region
         var theta = Math.acos(Math.abs(position.z) / r);
         var polarFactor = Math.abs(Math.cos(theta));
         if (polarFactor > 0.6) {
@@ -793,7 +750,6 @@ function calculatePhysicsAtPoint(position) {
         }
     }
     
-    // Observer motion effects (if enabled)
     if (shader.parameters.observer && shader.parameters.observer.motion) {
         var obsDistance = shader.parameters.observer.distance;
         var obsVelocity = 1.0 / Math.sqrt(2.0 * (obsDistance - 1.0));
@@ -817,7 +773,6 @@ function updateProbeDisplay() {
         var html = '<h4>Physics Probe - Live Data</h4>';
         html += '<div class="probe-data">';
         
-        // Group data by category for better organization
         var basicData = {};
         var relativisticData = {};
         var orbitalData = {};
@@ -836,7 +791,6 @@ function updateProbeDisplay() {
             }
         }
         
-        // Display basic measurements
         if (Object.keys(basicData).length > 0) {
             html += '<div class="probe-section"><h5>Basic Properties</h5>';
             for (var key in basicData) {
@@ -851,7 +805,6 @@ function updateProbeDisplay() {
             html += '</div>';
         }
         
-        // Display relativistic effects
         if (Object.keys(relativisticData).length > 0) {
             html += '<div class="probe-section"><h5>Relativistic Effects</h5>';
             for (var key in relativisticData) {
@@ -866,7 +819,6 @@ function updateProbeDisplay() {
             html += '</div>';
         }
         
-        // Display orbital mechanics
         if (Object.keys(orbitalData).length > 0) {
             html += '<div class="probe-section"><h5>Orbital Mechanics</h5>';
             for (var key in orbitalData) {
@@ -881,7 +833,6 @@ function updateProbeDisplay() {
             html += '</div>';
         }
         
-        // Display special phenomena
         if (Object.keys(specialData).length > 0) {
             html += '<div class="probe-section"><h5>Special Phenomena</h5>';
             for (var key in specialData) {
@@ -948,7 +899,6 @@ function updateMeasurementDisplay() {
     }
 }
 
-// Enable mouse measurement mode
 function enableMouseMeasurement() {
     measurementSystem.mouseMeasurement = true;
     renderer.domElement.style.cursor = 'crosshair';
