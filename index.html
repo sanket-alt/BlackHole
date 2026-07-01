@@ -1,37 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
     <head>
-        <title>Kerr Black Hole - Research Grade Simulator</title>
+        <title>Black Hole</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-        <meta property="og:title"              content="Kerr Metric Black Hole Simulator" />
-        <meta property="og:description"        content="Research-grade ray-traced simulation of spinning (Kerr) black holes. Real-time physics-driven visualization with Boyer-Lindquist coordinates, null geodesic integration, and magnetic field topology." />
+        <meta property="og:title"              content="THREE.js Black Hole" />
+        <meta property="og:description"        content="A real time ray-traced simulation of a Schwarzschild black hole. Needs a decent GPU and a recent variant of Chrome or Firefox to run smoothly." />
         <link rel="stylesheet" href="style.css">
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-            .kerr-control-panel {
-                position: fixed;
-                right: 0;
-                top: 0;
-                width: 350px;
-                height: 100vh;
-                background: rgba(20, 20, 30, 0.95);
-                color: #e0e0e0;
-                overflow-y: auto;
-                padding: 20px;
-                border-left: 2px solid #00ccff;
-                z-index: 1000;
+    </head>
+    <body>
+        
+        
+        
+        <div id="magnetic-legend" class="magnetic-legend initially-hidden">
+            <h4>Magnetic Field Lines</h4>
+            <div class="legend-item">
+                <span class="color-box" style="background-color: #00ccff;"></span>
+                <span>Regular Dipole Lines</span>
+            </div>
+            <div class="legend-item">
+                <span class="color-box" style="background-color: #ff33cc;"></span>
+                <span>Twisted Field Lines</span>
+            </div>
+            <div class="legend-item">
+                <span class="color-box" style="background-color: #00ff33;"></span>
+                <span>Polar Jets</span>
+            </div>
+        </div>
+        <div class="info ">
+            <div id="loader">
+                Loading...
+                <div class="disclaimer">
+                This demo leverages GPU-accelerated WebGL and modern shader support for real-time ray tracing.
+                </div>
+            </div>
+
+        </div>
+
+
+
+        <script src="js-libs/jquery-2.1.4.min.js"></script>
+        <script src="js-libs/three.min.js"></script>
+        <script src="js-libs/OrbitControls.js"></script>
+        <script src="js-libs/Detector.js"></script>
+        <script src="js-libs/stats.min.js"></script>
+        <script src="js-libs/ShaderLoader.min.js"></script>
+        <script src="js-libs/mustache.min.js"></script>
+        <script src="js-libs/dat.gui.min.js"></script>
+        <script src="three-js-monkey-patch.js"></script>
+
+        <script id="vertex-shader" type="x-shader/x-vertex">
+
+            void main()    {
+
+                gl_Position = vec4( position, 1.0 );
+
             }
-            .kerr-control-panel h2 { color: #00ccff; margin: 0 0 15px 0; font-size: 1.2em; }
-            .kerr-control-panel h3 { color: #ffaa00; margin: 20px 0 10px 0; font-size: 1em; }
-            .panel-section { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #444; }
-            .control-group { margin: 12px 0; }
-            .control-group label { display: block; margin-bottom: 5px; font-size: 0.9em; }
-            .control-group input[type="range"] { width: 100%; }
-            .control-group input[type="checkbox"] { margin-right: 8px; }
-            .help-text { font-size: 0.75em; color: #888; margin-top: 3px; }
-            .info-box { background: rgba(0, 200, 255, 0.1); padding: 10px; border-radius: 4px; margin: 10px 0; font-size: 0.85em; }
-            .info-box h4 { margin: 0 0 8px 0; color: #00ccff; }
-            .info-box p { margin: 3px 0; }
-            button { background: #00ccff; color: #000; border: none; padding: 8px 12px; margin: 5px 0; border-radius: 3px; cursor: pointer; font-weight: bold; width: 100%; }\n            button:hover { background: #00ffff; }\n        </style>\n    </head>\n    <body>\n        <div id=\"magnetic-legend\" class=\"magnetic-legend initially-hidden\">\n            <h4>Magnetic Field Lines</h4>\n            <div class=\"legend-item\">\n                <span class=\"color-box\" style=\"background-color: #00ccff;\"></span>\n                <span>Poloidal Field</span>\n            </div>\n            <div class=\"legend-item\">\n                <span class=\"color-box\" style=\"background-color: #ff33cc;\"></span>\n                <span>Toroidal Field</span>\n            </div>\n            <div class=\"legend-item\">\n                <span class=\"color-box\" style=\"background-color: #00ff33;\"></span>\n                <span>Polar Jets</span>\n            </div>\n        </div>\n\n        <div class=\"info\">\n            <div id=\"loader\">\n                Loading Kerr Metric Simulator...\n                <div class=\"disclaimer\">\n                    GPU-accelerated ray-tracing in Boyer-Lindquist coordinates.\n                    Real-time null geodesic integration in Kerr spacetime.\n                </div>\n            </div>\n        </div>\n\n        <div id=\"kerr-panel\"></div>\n\n        <!-- Physics Libraries -->\n        <script src=\"constants.js\"></script>\n        <script src=\"physics/kerr-metric.js\"></script>\n        <script src=\"physics/geodesic-integrator.js\"></script>\n        <script src=\"physics/magnetic-field-topology.js\"></script>\n        <script src=\"data-loader.js\"></script>\n        <script src=\"export-utils.js\"></script>\n        <script src=\"kerr-control-panel.js\"></script>\n\n        <!-- Three.js and utilities -->\n        <script src=\"js-libs/jquery-2.1.4.min.js\"></script>\n        <script src=\"js-libs/three.min.js\"></script>\n        <script src=\"js-libs/OrbitControls.js\"></script>\n        <script src=\"js-libs/Detector.js\"></script>\n        <script src=\"js-libs/stats.min.js\"></script>\n        <script src=\"js-libs/ShaderLoader.min.js\"></script>\n        <script src=\"js-libs/mustache.min.js\"></script>\n        <script src=\"js-libs/dat.gui.min.js\"></script>\n        <script src=\"three-js-monkey-patch.js\"></script>\n\n        <script id=\"vertex-shader\" type=\"x-shader/x-vertex\">\n            void main() {\n                gl_Position = vec4( position, 1.0 );\n            }\n        </script>\n        \n        <script data-src=\"raytracer.glsl\" data-name=\"raytracer\" type=\"x-shader/x-fragment\"></script>\n        \n        <script src=\"main.js\"></script>\n        <script src=\"info-panel.js\"></script>\n    </body>\n</html>
+
+        </script>
+        <script data-src="raytracer.glsl" data-name="raytracer" type="x-shader/x-fragment"></script>
+        <script src="main.js"></script>
+        <script src="info-panel.js"></script>
+
+    </body>
+</html>
