@@ -15,7 +15,18 @@ body {
     position: absolute;
     padding: 20px;
     width: 100%;
+    text-align: center;
     color: #ffffff;
+}
+
+.link-bar {
+    position: absolute;
+    bottom: 20px;
+    width: 100%;
+    text-align: center;
+    background: #000000;
+    border: 2px solid #ffffff;
+    padding: 12px;
 }
 
 #loader {
@@ -39,6 +50,22 @@ body {
     font-size: 8px;
 }
 
+#hint-text {
+    position: absolute;
+    width: 100%;
+    top: 20px;
+    text-align: center;
+    color: #ffffff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    animation: slideDown 0.5s ease-out;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 a {
     color: #ffffff;
     text-decoration: none;
@@ -47,4 +74,27 @@ a {
 a:hover {
     color: #ffffff;
     text-decoration: underline;
+}
+
+.initially-hidden {
+    visibility: hidden;
+}
+
+@media screen and (max-width: 800px) {
+    .hidden-phone {
+        visibility: hidden;
+    }
+}
+
+.magnetic-legend {
+    position: absolute;
+    top: 80px;
+    left: 20px;
+    background: #000000;
+    border: 2px solid #ffffff;
+    padding: 8px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 6px;
+    z-index: 1000;
+    min-width: 160px;
 }
